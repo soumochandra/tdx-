@@ -1,4 +1,3 @@
-
 // index.js (Backend)
 require('dotenv').config();
 const express = require('express');
@@ -19,7 +18,7 @@ const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI;
 const JWT_SECRET = process.env.JWT_SECRET;
 
-// MongoDB Atlas Connection
+// Connect to MongoDB Atlas
 mongoose.connect(MONGO_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true
@@ -27,50 +26,58 @@ mongoose.connect(MONGO_URI, {
 .then(() => console.log('✅ MongoDB Atlas connected'))
 .catch(err => console.error('❌ MongoDB connection error:', err));
 
-// Register
+// Register a new user
 app.post('/register', async (req, res) => {
   const { username, password } = req.body;
-  const hashed = await bcrypt.hash(password, 10);
-  const user = new User({ username, password: hashed });
-  await user.save();
-  res.send({ message: 'Registered' });
-});
-
-// Login
-app.post('/login', async (req, res) => {
-  const { username, password } = req.body;
-  const user = await User.findOne({ username });
-  if (user && await bcrypt.compare(password, user.password)) {
-    const token = jwt.sign({ id: user._id }, JWT_SECRET);
-    res.send({ token });
-  } else {
-    res.status(401).send({ error: 'Invalid credentials' });
+  try {
+    const hashed = await bcrypt.hash(password, 10);
+    const user = new User({ username, password: hashed });
+    await user.save();
+    res.send({ message: 'Registered successfully' });
+  } catch (err) {
+    res.status(500).send({ error: 'Registration failed' });
   }
 });
 
-// Get Saved Funds
+// Login and generate token
+app.post('/login', async (req, res) => {
+  const { username, password } = req.body;
+  try {
+    const user = await User.findOne({ username });
+    if (user && await bcrypt.compare(password, user.password)) {
+      const token = jwt.sign({ id: user._id }, JWT_SECRET);
+      res.send({ token });
+    } else {
+      res.status(401).send({ error: 'Invalid credentials' });
+    }
+  } catch (err) {
+    res.status(500).send({ error: 'Login failed' });
+  }
+});
+
+// Get saved mutual funds
 app.get('/saved', auth, async (req, res) => {
   const user = await User.findById(req.user.id);
   res.send(user.savedFunds || []);
 });
 
-// Save Fund
+// Save a mutual fund
 app.post('/save', auth, async (req, res) => {
   const user = await User.findById(req.user.id);
   user.savedFunds.push(req.body.fund);
   await user.save();
-  res.send({ message: 'Saved' });
+  res.send({ message: 'Fund saved' });
 });
 
-// Remove Fund
+// Remove a mutual fund
 app.post('/remove', auth, async (req, res) => {
   const user = await User.findById(req.user.id);
   user.savedFunds = user.savedFunds.filter(f => f.id !== req.body.fund.id);
   await user.save();
-  res.send({ message: 'Removed' });
+  res.send({ message: 'Fund removed' });
 });
 
-// Reset Password
+// Reset password
 app.post('/reset-password', async (req, res) => {
   const { username, newPassword } = req.body;
   try {
@@ -80,13 +87,14 @@ app.post('/reset-password', async (req, res) => {
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     user.password = hashedPassword;
     await user.save();
-
     res.send({ message: 'Password reset successfully' });
   } catch (err) {
     console.error(err);
-    res.status(500).send({ error: 'Server error' });
+    res.status(500).send({ error: 'Password reset failed' });
   }
 });
 
-// Start Server
-app.listen(PORT, () => console.log(`🚀 Backend running on port ${PORT}`));
+// Start the server
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+});
